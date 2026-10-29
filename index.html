@@ -1,0 +1,807 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flight Globe — карта путешествий</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07111f;
+      --panel: rgba(13, 27, 46, .88);
+      --text: #f1f6ff;
+      --muted: #9fb0c8;
+      --accent: #62e6cf;
+      --line: rgba(164, 190, 225, .18);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      overflow: hidden;
+      background:
+        radial-gradient(ellipse at 50% 42%, #152d4b 0%, #07111f 58%, #030812 100%);
+      color: var(--text);
+      font-family: Inter, system-ui, -apple-system, Segoe UI, sans-serif;
+    }
+
+    #globe {
+      position: fixed;
+      inset: 0;
+    }
+
+    .topbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 2;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      padding: 22px 28px;
+      pointer-events: none;
+    }
+
+    .brand, .status {
+      border: 1px solid var(--line);
+      background: rgba(7, 17, 31, .72);
+      backdrop-filter: blur(16px);
+      border-radius: 16px;
+      padding: 12px 16px;
+    }
+
+    .brand strong {
+      display: block;
+      font-size: 15px;
+      letter-spacing: .16em;
+    }
+
+    .brand span, .status {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .brand span { display: block; margin-top: 4px; }
+
+    .layout {
+      position: fixed;
+      z-index: 2;
+      left: 22px;
+      bottom: 22px;
+      width: min(370px, calc(100vw - 44px));
+      max-height: 55vh;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      backdrop-filter: blur(18px);
+      border-radius: 20px;
+      padding: 18px;
+      box-shadow: 0 18px 60px rgba(0, 0, 0, .24);
+    }
+
+    h1 {
+      font-size: 20px;
+      line-height: 1.25;
+      margin: 0 0 8px;
+    }
+
+    .sub {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    #routeList {
+      margin-top: 14px;
+      overflow: auto;
+      min-height: 0;
+    }
+
+    .leg {
+      position: relative;
+      padding: 11px 0 11px 17px;
+      border-left: 1px solid rgba(98, 230, 207, .35);
+    }
+
+    .leg::before {
+      content: "";
+      position: absolute;
+      left: -4px;
+      top: 17px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 12px rgba(98, 230, 207, .8);
+    }
+
+    .leg:last-child { border-left-color: transparent; }
+
+    .leg strong {
+      display: block;
+      font-size: 13px;
+      line-height: 1.5;
+      font-weight: 600;
+    }
+
+    .leg small {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    button {
+      border: 1px solid var(--line);
+      color: var(--text);
+      background: rgba(255, 255, 255, .06);
+      border-radius: 12px;
+      padding: 10px 13px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 12px;
+      transition: .2s ease;
+    }
+
+    button:hover {
+      background: rgba(98, 230, 207, .13);
+      border-color: rgba(98, 230, 207, .45);
+    }
+
+    button.primary {
+      color: #06131e;
+      background: var(--accent);
+      border-color: var(--accent);
+      font-weight: 700;
+    }
+
+    .footer-note {
+      font-size: 11px;
+      line-height: 1.5;
+      color: var(--muted);
+      padding: 0 4px;
+    }
+
+    #message {
+      position: fixed;
+      z-index: 3;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      pointer-events: none;
+    }
+
+    #message .box {
+      width: min(440px, 100%);
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: rgba(7, 17, 31, .92);
+      text-align: center;
+      pointer-events: auto;
+    }
+
+    #message h2 { margin: 0 0 10px; font-size: 20px; }
+    #message p { color: var(--muted); line-height: 1.6; font-size: 13px; }
+    #message button { margin-top: 8px; }
+
+    .hidden { display: none !important; }
+
+    @media (max-width: 640px) {
+      .topbar { padding: 12px; }
+      .brand { padding: 10px 12px; }
+      .status { padding: 10px; max-width: 130px; text-align: right; }
+      .layout { left: 12px; bottom: 12px; width: calc(100vw - 24px); max-height: 43vh; }
+      .panel { padding: 14px; border-radius: 16px; }
+      h1 { font-size: 17px; }
+      #routeList { max-height: 22vh; }
+    }
+  </style>
+</head>
+<body>
+  <div id="globe"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <strong>FLIGHT GLOBE</strong>
+      <span>ТВОЯ ИСТОРИЯ ПЕРЕЛЁТОВ</span>
+    </div>
+    <div class="status" id="status">Подключение…</div>
+  </header>
+
+  <section class="layout">
+    <div class="panel">
+      <h1 id="routeTitle">Загружаем маршрут</h1>
+      <div class="sub" id="routeSummary">
+        Получаем данные из Telegram-бота…
+      </div>
+      <div id="routeList"></div>
+      <div class="controls">
+        <button class="primary" id="playBtn">Ⅱ Пауза</button>
+        <button id="restartBtn">↻ Сначала</button>
+        <button id="rotateBtn">Вращение: вкл.</button>
+      </div>
+    </div>
+    <div class="footer-note">
+      Перемещай глобус мышью или пальцем. Колесо мыши — масштаб.
+    </div>
+  </section>
+
+  <div id="message">
+    <div class="box">
+      <h2>Flight Globe</h2>
+      <p id="messageText">Загружаем твои перелёты…</p>
+      <button id="retryBtn">Попробовать ещё раз</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from
+      "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+    import { OrbitControls } from
+      "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js";
+
+    // Адрес твоего Cloudflare Worker.
+    const API_BASE = "https://flight-globe-bot.sergrav97.workers.dev";
+
+    const globeRoot = document.getElementById("globe");
+    const statusEl = document.getElementById("status");
+    const titleEl = document.getElementById("routeTitle");
+    const summaryEl = document.getElementById("routeSummary");
+    const routeListEl = document.getElementById("routeList");
+    const messageEl = document.getElementById("message");
+    const messageTextEl = document.getElementById("messageText");
+    const playBtn = document.getElementById("playBtn");
+    const restartBtn = document.getElementById("restartBtn");
+    const rotateBtn = document.getElementById("rotateBtn");
+    const retryBtn = document.getElementById("retryBtn");
+
+    let scene, camera, renderer, controls, earth;
+    let routeGroup;
+    let routeObjects = [];
+    let routeData = [];
+    let animationProgress = 0;
+    let playing = true;
+    let autoRotate = true;
+    let lastFrame = 0;
+    let totalDuration = 22;
+    let elapsed = 0;
+
+    const EARTH_RADIUS = 1;
+    const ROUTE_COLOR = 0x62e6cf;
+    const FLIGHT_COLOR = 0xffd479;
+
+    initScene();
+    animate();
+    loadRoute();
+
+    function initScene() {
+      scene = new THREE.Scene();
+
+      camera = new THREE.PerspectiveCamera(
+        42,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        100
+      );
+      camera.position.set(0, 0.2, 3.5);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      globeRoot.appendChild(renderer.domElement);
+
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.06;
+      controls.minDistance = 1.5;
+      controls.maxDistance = 6;
+      controls.autoRotate = true;
+      controls.autoRotateSpeed = 0.28;
+      controls.enablePan = false;
+
+      scene.add(new THREE.AmbientLight(0x9cb9dc, 2.0));
+
+      const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+      sun.position.set(4, 2, 5);
+      scene.add(sun);
+
+      const fill = new THREE.PointLight(0x2d8cff, 1.3);
+      fill.position.set(-4, -1, -3);
+      scene.add(fill);
+
+      createStars();
+      createEarth();
+
+      routeGroup = new THREE.Group();
+      scene.add(routeGroup);
+
+      window.addEventListener("resize", onResize);
+
+      playBtn.addEventListener("click", () => {
+        playing = !playing;
+        playBtn.textContent = playing ? "Ⅱ Пауза" : "▶ Продолжить";
+      });
+
+      restartBtn.addEventListener("click", () => {
+        elapsed = 0;
+        animationProgress = 0;
+        playing = true;
+        playBtn.textContent = "Ⅱ Пауза";
+        updateFlights(0);
+      });
+
+      rotateBtn.addEventListener("click", () => {
+        autoRotate = !autoRotate;
+        controls.autoRotate = autoRotate;
+        rotateBtn.textContent = autoRotate
+          ? "Вращение: вкл."
+          : "Вращение: выкл.";
+      });
+
+      retryBtn.addEventListener("click", loadRoute);
+    }
+
+    function createEarth() {
+      const geometry = new THREE.SphereGeometry(EARTH_RADIUS, 96, 64);
+
+      const loader = new THREE.TextureLoader();
+      loader.load(
+        "https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg",
+        texture => {
+          texture.colorSpace = THREE.SRGBColorSpace;
+          earth.material.map = texture;
+          earth.material.needsUpdate = true;
+        },
+        undefined,
+        () => {}
+      );
+
+      earth = new THREE.Mesh(
+        geometry,
+        new THREE.MeshPhongMaterial({
+          color: 0x315b80,
+          specular: 0x4d779c,
+          shininess: 18,
+          transparent: false
+        })
+      );
+      scene.add(earth);
+
+      const atmosphere = new THREE.Mesh(
+        new THREE.SphereGeometry(1.035, 64, 48),
+        new THREE.ShaderMaterial({
+          vertexShader: `
+            varying vec3 vNormal;
+            void main() {
+              vNormal = normalize(normalMatrix * normal);
+              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+          `,
+          fragmentShader: `
+            varying vec3 vNormal;
+            void main() {
+              float intensity = pow(0.72 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.0);
+              gl_FragColor = vec4(0.18, 0.55, 1.0, intensity * 0.48);
+            }
+          `,
+          blending: THREE.AdditiveBlending,
+          side: THREE.BackSide,
+          transparent: true,
+          depthWrite: false
+        })
+      );
+      scene.add(atmosphere);
+
+      // Тонкие линии широт и долгот.
+      const grid = new THREE.Group();
+      const gridMaterial = new THREE.LineBasicMaterial({
+        color: 0x8cc9f4,
+        transparent: true,
+        opacity: 0.13
+      });
+
+      for (let lat = -60; lat <= 60; lat += 30) {
+        const points = [];
+        for (let lon = -180; lon <= 180; lon += 3) {
+          points.push(latLonVector(lat, lon, 1.003));
+        }
+        grid.add(new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints(points),
+          gridMaterial
+        ));
+      }
+
+      for (let lon = -180; lon < 180; lon += 30) {
+        const points = [];
+        for (let lat = -90; lat <= 90; lat += 3) {
+          points.push(latLonVector(lat, lon, 1.003));
+        }
+        grid.add(new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints(points),
+          gridMaterial
+        ));
+      }
+      scene.add(grid);
+    }
+
+    function createStars() {
+      const positions = [];
+      for (let i = 0; i < 1800; i++) {
+        const radius = 8 + Math.random() * 22;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        positions.push(
+          radius * Math.sin(phi) * Math.cos(theta),
+          radius * Math.cos(phi),
+          radius * Math.sin(phi) * Math.sin(theta)
+        );
+      }
+
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute(positions, 3)
+      );
+
+      const stars = new THREE.Points(
+        geometry,
+        new THREE.PointsMaterial({
+          color: 0xb7d5ff,
+          size: 0.035,
+          transparent: true,
+          opacity: 0.8
+        })
+      );
+      scene.add(stars);
+    }
+
+    function latLonVector(lat, lon, radius = 1) {
+      const phi = THREE.MathUtils.degToRad(90 - lat);
+      const theta = THREE.MathUtils.degToRad(lon + 180);
+
+      return new THREE.Vector3(
+        -radius * Math.sin(phi) * Math.cos(theta),
+        radius * Math.cos(phi),
+        radius * Math.sin(phi) * Math.sin(theta)
+      );
+    }
+
+    function createArc(start, end) {
+      const distance = start.distanceTo(end);
+      const middle = start.clone().add(end).multiplyScalar(0.5);
+      middle.normalize().multiplyScalar(1 + Math.min(0.55, distance * 0.28));
+
+      const curve = new THREE.QuadraticBezierCurve3(start, middle, end);
+      const points = curve.getPoints(100);
+      const geometry = new THREE.BufferGeometry().setFromPoints(points);
+
+      const line = new THREE.Line(
+        geometry,
+        new THREE.LineBasicMaterial({
+          color: ROUTE_COLOR,
+          transparent: true,
+          opacity: 0.78
+        })
+      );
+
+      routeGroup.add(line);
+      return { curve, line };
+    }
+
+    function addCity(city, lat, lon, index) {
+      const position = latLonVector(lat, lon, 1.012);
+
+      const marker = new THREE.Mesh(
+        new THREE.SphereGeometry(0.012, 12, 12),
+        new THREE.MeshBasicMaterial({ color: ROUTE_COLOR })
+      );
+      marker.position.copy(position);
+      routeGroup.add(marker);
+
+      const halo = new THREE.Mesh(
+        new THREE.SphereGeometry(0.025, 12, 12),
+        new THREE.MeshBasicMaterial({
+          color: ROUTE_COLOR,
+          transparent: true,
+          opacity: 0.16
+        })
+      );
+      halo.position.copy(position);
+      routeGroup.add(halo);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = 512;
+      canvas.height = 96;
+      const ctx = canvas.getContext("2d");
+      ctx.font = "600 34px Arial";
+      ctx.fillStyle = "#f2f8ff";
+      ctx.shadowColor = "#07111f";
+      ctx.shadowBlur = 8;
+      ctx.fillText(city, 8, 48);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      const label = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: texture,
+          transparent: true,
+          depthTest: false
+        })
+      );
+      label.position.copy(position.clone().multiplyScalar(1.08));
+      label.scale.set(0.42, 0.08, 1);
+      routeGroup.add(label);
+
+      return { city, position, marker, halo, label, index };
+    }
+
+    function createFlightDot() {
+      const dot = new THREE.Mesh(
+        new THREE.SphereGeometry(0.018, 16, 16),
+        new THREE.MeshBasicMaterial({
+          color: FLIGHT_COLOR,
+          toneMapped: false
+        })
+      );
+
+      const glow = new THREE.Mesh(
+        new THREE.SphereGeometry(0.04, 16, 16),
+        new THREE.MeshBasicMaterial({
+          color: FLIGHT_COLOR,
+          transparent: true,
+          opacity: 0.18
+        })
+      );
+
+      const group = new THREE.Group();
+      group.add(glow);
+      group.add(dot);
+      routeGroup.add(group);
+      return group;
+    }
+
+    function clearRoute() {
+      while (routeGroup.children.length) {
+        const object = routeGroup.children.pop();
+        if (object.geometry) object.geometry.dispose();
+        if (object.material) {
+          if (Array.isArray(object.material)) {
+            object.material.forEach(m => m.dispose());
+          } else {
+            object.material.dispose();
+          }
+        }
+      }
+      routeObjects = [];
+    }
+
+    function drawRoute(route) {
+      clearRoute();
+      routeData = route;
+      elapsed = 0;
+      animationProgress = 0;
+
+      const cities = new Map();
+      const flights = [];
+
+      for (let i = 0; i < route.length; i++) {
+        const leg = route[i];
+        const from = leg.from || leg.departure || leg.origin;
+        const to = leg.to || leg.arrival || leg.destination;
+
+        if (!from || !to ||
+            !Number.isFinite(Number(from.lat)) ||
+            !Number.isFinite(Number(from.lon)) ||
+            !Number.isFinite(Number(to.lat)) ||
+            !Number.isFinite(Number(to.lon))) {
+          continue;
+        }
+
+        const fromKey = `${from.name}|${from.lat}|${from.lon}`;
+        const toKey = `${to.name}|${to.lat}|${to.lon}`;
+
+        if (!cities.has(fromKey)) {
+          cities.set(fromKey, addCity(
+            from.name || "Вылет",
+            Number(from.lat), Number(from.lon), cities.size
+          ));
+        }
+        if (!cities.has(toKey)) {
+          cities.set(toKey, addCity(
+            to.name || "Прилёт",
+            Number(to.lat), Number(to.lon), cities.size
+          ));
+        }
+
+        const start = latLonVector(Number(from.lat), Number(from.lon), 1.012);
+        const end = latLonVector(Number(to.lat), Number(to.lon), 1.012);
+        const arc = createArc(start, end);
+        const dot = createFlightDot();
+
+        flights.push({
+          from: from.name || "Вылет",
+          to: to.name || "Прилёт",
+          arc,
+          dot,
+          start,
+          end,
+          index: i
+        });
+      }
+
+      routeObjects = flights;
+      totalDuration = Math.max(12, flights.length * 4.5);
+      updateFlights(0);
+      renderRouteList(route, flights.length);
+
+      if (!flights.length) {
+        showMessage(
+          "Маршрут получен, но формат координат не распознан. " +
+          "Нужно согласовать структуру данных между Worker и страницей."
+        );
+        statusEl.textContent = "Нет координат";
+        return;
+      }
+
+      hideMessage();
+      statusEl.textContent = `${flights.length} перелётов`;
+      titleEl.textContent = "Твоя карта путешествий";
+      summaryEl.textContent =
+        `${cities.size} городов · ${flights.length} перелётов`;
+    }
+
+    function updateFlights(progress) {
+      const count = routeObjects.length;
+      if (!count) return;
+
+      routeObjects.forEach((flight, index) => {
+        const startTime = index / count;
+        const endTime = (index + 1) / count;
+        const local = THREE.MathUtils.clamp(
+          (progress - startTime) / (endTime - startTime),
+          0, 1
+        );
+
+        const visible = progress >= startTime;
+        flight.arc.line.material.opacity = visible ? 0.78 : 0.12;
+
+        const point = flight.arc.curve.getPoint(local);
+        flight.dot.position.copy(point);
+        flight.dot.visible = visible && progress < endTime;
+      });
+    }
+
+    function renderRouteList(route, validCount) {
+      routeListEl.innerHTML = "";
+
+      route.forEach((leg, index) => {
+        const from = leg.from || leg.departure || leg.origin || {};
+        const to = leg.to || leg.arrival || leg.destination || {};
+
+        const row = document.createElement("div");
+        row.className = "leg";
+
+        const strong = document.createElement("strong");
+        strong.textContent =
+          `${index + 1}. ${from.name || "?"} → ${to.name || "?"}`;
+
+        const small = document.createElement("small");
+        small.textContent = "Перелёт";
+
+        row.append(strong, small);
+        routeListEl.appendChild(row);
+      });
+
+      if (!route.length) {
+        routeListEl.textContent = "В маршруте пока нет перелётов.";
+      }
+
+      if (route.length && !validCount) {
+        summaryEl.textContent = "Маршрут загружен, но координаты требуют проверки.";
+      }
+    }
+
+    async function loadRoute() {
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get("token");
+
+      if (!token) {
+        statusEl.textContent = "Нет ссылки";
+        showMessage(
+          "Открой страницу по ссылке, которую пришлёт Telegram-бот. " +
+          "В этой ссылке будет временный токен маршрута."
+        );
+        return;
+      }
+
+      statusEl.textContent = "Загружаем маршрут…";
+      messageTextEl.textContent = "Подключаемся к Telegram-боту…";
+      messageEl.classList.remove("hidden");
+
+      try {
+        const response = await fetch(
+          `${API_BASE}/api/route?token=${encodeURIComponent(token)}`,
+          { method: "GET", cache: "no-store" }
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            response.status === 404
+              ? "Ссылка не найдена или срок её действия истёк."
+              : `Сервер ответил с ошибкой ${response.status}.`
+          );
+        }
+
+        const payload = await response.json();
+        const route = Array.isArray(payload)
+          ? payload
+          : payload.route;
+
+        if (!Array.isArray(route) || !route.length) {
+          throw new Error("В ссылке нет данных о перелётах.");
+        }
+
+        drawRoute(route);
+      } catch (error) {
+        console.error(error);
+        statusEl.textContent = "Не удалось загрузить";
+        showMessage(
+          `${error.message} Когда подключим API в Worker, попробуй обновить страницу.`
+        );
+      }
+    }
+
+    function showMessage(message) {
+      messageTextEl.textContent = message;
+      messageEl.classList.remove("hidden");
+    }
+
+    function hideMessage() {
+      messageEl.classList.add("hidden");
+    }
+
+    function onResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    }
+
+    function animate(now = 0) {
+      requestAnimationFrame(animate);
+
+      const delta = lastFrame ? Math.min((now - lastFrame) / 1000, 0.05) : 0;
+      lastFrame = now;
+
+      if (playing && routeObjects.length) {
+        elapsed += delta;
+        animationProgress = (elapsed % totalDuration) / totalDuration;
+        updateFlights(animationProgress);
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+  </script>
+</body>
+</html>
