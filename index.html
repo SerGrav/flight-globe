@@ -5,6 +5,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Flight Globe — карта путешествий</title>
+
+  <!-- Позволяет браузеру разрешать импорт three внутри OrbitControls -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
   <style>
     :root {
       color-scheme: dark;
@@ -22,8 +33,10 @@
       margin: 0;
       min-height: 100vh;
       overflow: hidden;
-      background:
-        radial-gradient(ellipse at 50% 42%, #152d4b 0%, #07111f 58%, #030812 100%);
+      background: radial-gradient(
+        ellipse at 50% 42%,
+        #152d4b 0%, #07111f 58%, #030812 100%
+      );
       color: var(--text);
       font-family: Inter, system-ui, -apple-system, Segoe UI, sans-serif;
     }
@@ -208,14 +221,24 @@
     @media (max-width: 640px) {
       .topbar { padding: 12px; }
       .brand { padding: 10px 12px; }
-      .status { padding: 10px; max-width: 130px; text-align: right; }
-      .layout { left: 12px; bottom: 12px; width: calc(100vw - 24px); max-height: 43vh; }
+      .status {
+        padding: 10px;
+        max-width: 150px;
+        text-align: right;
+      }
+      .layout {
+        left: 12px;
+        bottom: 12px;
+        width: calc(100vw - 24px);
+        max-height: 43vh;
+      }
       .panel { padding: 14px; border-radius: 16px; }
       h1 { font-size: 17px; }
       #routeList { max-height: 22vh; }
     }
   </style>
 </head>
+
 <body>
   <div id="globe"></div>
 
@@ -254,12 +277,9 @@
   </div>
 
   <script type="module">
-    import * as THREE from
-      "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
-    import { OrbitControls } from
-      "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js";
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
-    // Адрес твоего Cloudflare Worker.
     const API_BASE = "https://flight-globe-bot.sergrav97.workers.dev";
 
     const globeRoot = document.getElementById("globe");
@@ -277,13 +297,13 @@
     let scene, camera, renderer, controls, earth;
     let routeGroup;
     let routeObjects = [];
-    let routeData = [];
     let animationProgress = 0;
     let playing = true;
     let autoRotate = true;
     let lastFrame = 0;
     let totalDuration = 22;
     let elapsed = 0;
+    let loadRequest = 0;
 
     const EARTH_RADIUS = 1;
     const ROUTE_COLOR = 0x62e6cf;
@@ -304,7 +324,10 @@
       );
       camera.position.set(0, 0.2, 3.5);
 
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true
+      });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -364,28 +387,30 @@
     function createEarth() {
       const geometry = new THREE.SphereGeometry(EARTH_RADIUS, 96, 64);
 
+      earth = new THREE.Mesh(
+        geometry,
+        new THREE.MeshPhongMaterial({
+          color: 0x315b80,
+          specular: 0x4d779c,
+          shininess: 18
+        })
+      );
+      scene.add(earth);
+
       const loader = new THREE.TextureLoader();
       loader.load(
         "https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg",
         texture => {
           texture.colorSpace = THREE.SRGBColorSpace;
           earth.material.map = texture;
+          earth.material.color.set(0xffffff);
           earth.material.needsUpdate = true;
         },
         undefined,
-        () => {}
+        error => {
+          console.warn("Не удалось загрузить текстуру Земли:", error);
+        }
       );
-
-      earth = new THREE.Mesh(
-        geometry,
-        new THREE.MeshPhongMaterial({
-          color: 0x315b80,
-          specular: 0x4d779c,
-          shininess: 18,
-          transparent: false
-        })
-      );
-      scene.add(earth);
 
       const atmosphere = new THREE.Mesh(
         new THREE.SphereGeometry(1.035, 64, 48),
@@ -400,7 +425,10 @@
           fragmentShader: `
             varying vec3 vNormal;
             void main() {
-              float intensity = pow(0.72 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.0);
+              float intensity = pow(
+                0.72 - dot(vNormal, vec3(0.0, 0.0, 1.0)),
+                2.0
+              );
               gl_FragColor = vec4(0.18, 0.55, 1.0, intensity * 0.48);
             }
           `,
@@ -412,7 +440,6 @@
       );
       scene.add(atmosphere);
 
-      // Тонкие линии широт и долгот.
       const grid = new THREE.Group();
       const gridMaterial = new THREE.LineBasicMaterial({
         color: 0x8cc9f4,
@@ -441,15 +468,18 @@
           gridMaterial
         ));
       }
+
       scene.add(grid);
     }
 
     function createStars() {
       const positions = [];
+
       for (let i = 0; i < 1800; i++) {
         const radius = 8 + Math.random() * 22;
         const theta = Math.random() * Math.PI * 2;
         const phi = Math.acos(2 * Math.random() - 1);
+
         positions.push(
           radius * Math.sin(phi) * Math.cos(theta),
           radius * Math.cos(phi),
@@ -463,7 +493,7 @@
         new THREE.Float32BufferAttribute(positions, 3)
       );
 
-      const stars = new THREE.Points(
+      scene.add(new THREE.Points(
         geometry,
         new THREE.PointsMaterial({
           color: 0xb7d5ff,
@@ -471,8 +501,7 @@
           transparent: true,
           opacity: 0.8
         })
-      );
-      scene.add(stars);
+      ));
     }
 
     function latLonVector(lat, lon, radius = 1) {
@@ -489,11 +518,14 @@
     function createArc(start, end) {
       const distance = start.distanceTo(end);
       const middle = start.clone().add(end).multiplyScalar(0.5);
-      middle.normalize().multiplyScalar(1 + Math.min(0.55, distance * 0.28));
+      middle.normalize().multiplyScalar(
+        1 + Math.min(0.55, distance * 0.28)
+      );
 
       const curve = new THREE.QuadraticBezierCurve3(start, middle, end);
-      const points = curve.getPoints(100);
-      const geometry = new THREE.BufferGeometry().setFromPoints(points);
+      const geometry = new THREE.BufferGeometry().setFromPoints(
+        curve.getPoints(100)
+      );
 
       const line = new THREE.Line(
         geometry,
@@ -532,6 +564,7 @@
       const canvas = document.createElement("canvas");
       canvas.width = 512;
       canvas.height = 96;
+
       const ctx = canvas.getContext("2d");
       ctx.font = "600 34px Arial";
       ctx.fillStyle = "#f2f8ff";
@@ -541,6 +574,7 @@
 
       const texture = new THREE.CanvasTexture(canvas);
       texture.colorSpace = THREE.SRGBColorSpace;
+
       const label = new THREE.Sprite(
         new THREE.SpriteMaterial({
           map: texture,
@@ -580,24 +614,44 @@
       return group;
     }
 
-    function clearRoute() {
-      while (routeGroup.children.length) {
-        const object = routeGroup.children.pop();
-        if (object.geometry) object.geometry.dispose();
-        if (object.material) {
-          if (Array.isArray(object.material)) {
-            object.material.forEach(m => m.dispose());
-          } else {
-            object.material.dispose();
+    // Удаляем объекты через remove(), а не напрямую меняя children.
+    // Заодно освобождаем геометрию, материалы и текстуры.
+    function disposeObject(object) {
+      object.traverse(child => {
+        if (child.geometry) {
+          child.geometry.dispose();
+        }
+
+        if (child.material) {
+          const materials = Array.isArray(child.material)
+            ? child.material
+            : [child.material];
+
+          for (const material of materials) {
+            for (const value of Object.values(material)) {
+              if (value && value.isTexture) {
+                value.dispose();
+              }
+            }
+            material.dispose();
           }
         }
+      });
+    }
+
+    function clearRoute() {
+      while (routeGroup.children.length) {
+        const object = routeGroup.children[0];
+        routeGroup.remove(object);
+        disposeObject(object);
       }
+
       routeObjects = [];
     }
 
     function drawRoute(route) {
       clearRoute();
-      routeData = route;
+
       elapsed = 0;
       animationProgress = 0;
 
@@ -609,11 +663,13 @@
         const from = leg.from || leg.departure || leg.origin;
         const to = leg.to || leg.arrival || leg.destination;
 
-        if (!from || !to ||
-            !Number.isFinite(Number(from.lat)) ||
-            !Number.isFinite(Number(from.lon)) ||
-            !Number.isFinite(Number(to.lat)) ||
-            !Number.isFinite(Number(to.lon))) {
+        if (
+          !from || !to ||
+          !Number.isFinite(Number(from.lat)) ||
+          !Number.isFinite(Number(from.lon)) ||
+          !Number.isFinite(Number(to.lat)) ||
+          !Number.isFinite(Number(to.lon))
+        ) {
           continue;
         }
 
@@ -623,18 +679,32 @@
         if (!cities.has(fromKey)) {
           cities.set(fromKey, addCity(
             from.name || "Вылет",
-            Number(from.lat), Number(from.lon), cities.size
-          ));
-        }
-        if (!cities.has(toKey)) {
-          cities.set(toKey, addCity(
-            to.name || "Прилёт",
-            Number(to.lat), Number(to.lon), cities.size
+            Number(from.lat),
+            Number(from.lon),
+            cities.size
           ));
         }
 
-        const start = latLonVector(Number(from.lat), Number(from.lon), 1.012);
-        const end = latLonVector(Number(to.lat), Number(to.lon), 1.012);
+        if (!cities.has(toKey)) {
+          cities.set(toKey, addCity(
+            to.name || "Прилёт",
+            Number(to.lat),
+            Number(to.lon),
+            cities.size
+          ));
+        }
+
+        const start = latLonVector(
+          Number(from.lat),
+          Number(from.lon),
+          1.012
+        );
+        const end = latLonVector(
+          Number(to.lat),
+          Number(to.lon),
+          1.012
+        );
+
         const arc = createArc(start, end);
         const dot = createFlightDot();
 
@@ -656,8 +726,8 @@
 
       if (!flights.length) {
         showMessage(
-          "Маршрут получен, но формат координат не распознан. " +
-          "Нужно согласовать структуру данных между Worker и страницей."
+          "Маршрут получен, но координаты не распознаны. " +
+          "Проверь формат данных, которые возвращает Worker."
         );
         statusEl.textContent = "Нет координат";
         return;
@@ -677,9 +747,11 @@
       routeObjects.forEach((flight, index) => {
         const startTime = index / count;
         const endTime = (index + 1) / count;
+
         const local = THREE.MathUtils.clamp(
           (progress - startTime) / (endTime - startTime),
-          0, 1
+          0,
+          1
         );
 
         const visible = progress >= startTime;
@@ -717,11 +789,13 @@
       }
 
       if (route.length && !validCount) {
-        summaryEl.textContent = "Маршрут загружен, но координаты требуют проверки.";
+        summaryEl.textContent =
+          "Маршрут загружен, но координаты требуют проверки.";
       }
     }
 
     async function loadRoute() {
+      const currentRequest = ++loadRequest;
       const params = new URLSearchParams(window.location.search);
       const token = params.get("token");
 
@@ -729,30 +803,42 @@
         statusEl.textContent = "Нет ссылки";
         showMessage(
           "Открой страницу по ссылке, которую пришлёт Telegram-бот. " +
-          "В этой ссылке будет временный токен маршрута."
+          "В ней будет временный токен маршрута."
         );
         return;
       }
 
       statusEl.textContent = "Загружаем маршрут…";
+      titleEl.textContent = "Загружаем маршрут";
       messageTextEl.textContent = "Подключаемся к Telegram-боту…";
       messageEl.classList.remove("hidden");
 
       try {
         const response = await fetch(
           `${API_BASE}/api/route?token=${encodeURIComponent(token)}`,
-          { method: "GET", cache: "no-store" }
+          {
+            method: "GET",
+            cache: "no-store"
+          }
         );
 
+        if (currentRequest !== loadRequest) return;
+
         if (!response.ok) {
-          throw new Error(
-            response.status === 404
-              ? "Ссылка не найдена или срок её действия истёк."
-              : `Сервер ответил с ошибкой ${response.status}.`
-          );
+          if (response.status === 404) {
+            throw new Error(
+              "Ссылка не найдена или срок её действия истёк. " +
+              "Создай новую ссылку через Telegram-бота."
+            );
+          }
+
+          throw new Error(`Сервер ответил с ошибкой ${response.status}.`);
         }
 
         const payload = await response.json();
+
+        if (currentRequest !== loadRequest) return;
+
         const route = Array.isArray(payload)
           ? payload
           : payload.route;
@@ -763,10 +849,14 @@
 
         drawRoute(route);
       } catch (error) {
-        console.error(error);
-        statusEl.textContent = "Не удалось загрузить";
+        if (currentRequest !== loadRequest) return;
+
+        console.error("Ошибка загрузки маршрута:", error);
+        statusEl.textContent = "Ошибка загрузки";
+
         showMessage(
-          `${error.message} Когда подключим API в Worker, попробуй обновить страницу.`
+          `${error.message || "Неизвестная ошибка"} ` +
+          "Попробуй обновить страницу или создать новую ссылку в боте."
         );
       }
     }
@@ -790,7 +880,10 @@
     function animate(now = 0) {
       requestAnimationFrame(animate);
 
-      const delta = lastFrame ? Math.min((now - lastFrame) / 1000, 0.05) : 0;
+      const delta = lastFrame
+        ? Math.min((now - lastFrame) / 1000, 0.05)
+        : 0;
+
       lastFrame = now;
 
       if (playing && routeObjects.length) {
